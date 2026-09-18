@@ -14,8 +14,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
-  schedule:
-    - cron: "23 6 * * 1"  # Mondays, 06:23 UTC
+  # schedule:
+  #   - cron: "23 6 * * 1"  # Mondays, 06:23 UTC
   workflow_dispatch:
 
 jobs:
