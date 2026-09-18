@@ -1,0 +1,14 @@
+# A CodeQL query suite (.qls) is a YAML list of instructions that selects
+# which queries to run. The simplest suite just says "run every .ql file in
+# this pack" — that's what we do here.
+#
+# You can also filter by tag, id, or metadata, e.g.:
+#   - queries: '.'
+#   - include:
+#       tags contain: security
+#       precision: high
+#
+# Docs: https://codeql.github.com/docs/codeql-cli/creating-codeql-query-suites/
+
+- description: "codeqldemo custom queries — demo of writing your own .ql/.qls"
+- queries: '.'
