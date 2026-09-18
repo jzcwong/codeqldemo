@@ -4,16 +4,42 @@ This directory holds a **CodeQL query pack** with a small set of hand-written
 queries and a suite that runs them. It's wired into `.github/workflows/codeql.yml`
 alongside the standard `security-and-quality` suite.
 
+## Why write custom queries at all?
+
+The built-in `security-and-quality` suite already catches most of what's in
+this repo. Custom QL earns its place when you need one of four things the
+built-ins can't give you:
+
+1. **Project-specific rules** — conventions the language doesn't know about,
+   like "every route must be wrapped with `@login_required`."
+2. **Different precision/recall trade-offs** — e.g. flag *every* `shell=True`,
+   even ones the built-in taint tracker deems unreachable.
+3. **Custom sinks/sources** for the built-in taint library — internal SDKs
+   the shipped library doesn't model.
+4. **New AST-level anti-patterns** the built-ins don't cover.
+
+Two of the three queries here are chosen specifically to *not* overlap with
+built-ins so you can see the value:
+
+| File | Category | Overlaps with built-in? |
+|---|---|---|
+| `RouteMissingAuth.ql` | Project-specific rule (#1) | **No** — auth conventions are project-defined. |
+| `TemplateStringNonLiteral.ql` | AST anti-pattern (#4) | Partial — `py/reflective-xss` needs a taint path; this bans the shape. |
+| `SubprocessShellTrue.ql` | Precision trade-off (#2) | Yes, with `py/command-line-injection` — this one is intentionally louder. |
+
 ## Anatomy
 
 ```
 custom-queries/
-├── qlpack.yml            # pack manifest: name, version, language dependency
-├── custom-suite.qls      # query suite — the "what to run" YAML
-├── FlaskDebugTrue.ql     # single query: AST match for app.run(debug=True)
-├── SubprocessShellTrue.ql# single query: AST match for subprocess.*(shell=True)
-└── HardcodedSecretName.ql# single query: string literals assigned to secret-ish names
+├── qlpack.yml                    # pack manifest: name, version, language dependency
+├── custom-suite.qls              # query suite — the "what to run" YAML
+├── RouteMissingAuth.ql           # project-rule: @app.route without an auth decorator
+├── TemplateStringNonLiteral.ql   # anti-pattern: render_template_string(<non-literal>)
+└── SubprocessShellTrue.ql        # AST match for subprocess.*(shell=True)
 ```
+
+Each `.ql` file's header comment explains what it fires on and where in
+`app.py` you should expect the alerts.
 
 ### `qlpack.yml`
 
@@ -39,7 +65,11 @@ Two useful "kinds":
 - `@kind path-problem` — a source-to-sink data-flow alert; requires more
   library scaffolding (`import DataFlow::PathGraph`, a `Configuration`
   class, and `select sink, source, sink, "…"`). The built-in
-  `py/sql-injection` query is a path-problem.
+  `py/sql-injection` query is a path-problem. If you wanted an even
+  stricter version of `TemplateStringNonLiteral.ql` that only fires when
+  request data actually reaches the template, you'd rewrite it as a
+  `path-problem` with `RemoteFlowSource` as the source and the
+  `render_template_string` argument as the sink.
 
 ### `.qls` — a query suite
 
@@ -55,7 +85,7 @@ filter by tag, precision, or `@id`:
       - high
       - very-high
 - exclude:
-    id: py/demo/hardcoded-secret-name
+    id: py/demo/subprocess-shell-true
 ```
 
 ## How this hooks into GitHub Actions
@@ -87,7 +117,7 @@ codeql database create db --language=python --source-root=.
 # run one query
 codeql query run \
   --database=db \
-  .github/codeql/custom-queries/FlaskDebugTrue.ql
+  .github/codeql/custom-queries/RouteMissingAuth.ql
 
 # run the whole suite as SARIF
 codeql database analyze db \
