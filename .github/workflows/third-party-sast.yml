@@ -24,9 +24,6 @@ jobs:
   semgrep:
     name: Semgrep (code SAST)
     runs-on: ubuntu-latest
-    # Semgrep's own container has the CLI and rules preinstalled.
-    container:
-      image: semgrep/semgrep@sha256:4f79d592f85f91aa37597c0cfbad94ea5fa35c65571425fb061e406e6724d76e
     permissions:
       security-events: write   # required to upload SARIF
       contents: read
@@ -36,12 +33,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        # Pin the CLI version for reproducibility.
+        run: pip install --no-cache-dir semgrep==1.140.0
+
       - name: Run Semgrep and produce SARIF
         # `p/ci` is a curated ruleset covering common SAST findings
         # across many languages (incl. Python and JavaScript).
+        # `|| true` keeps the job green so the SARIF still uploads.
         run: semgrep ci --sarif --output=semgrep.sarif || true
         env:
-          # No token needed for public rulesets; unset SEMGREP_APP_TOKEN.
+          # No token needed for public rulesets; leave SEMGREP_APP_TOKEN unset.
           SEMGREP_RULES: p/ci
 
       - name: Upload Semgrep SARIF to Code Scanning
