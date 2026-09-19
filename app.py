@@ -14,8 +14,9 @@ Vulnerabilities seeded (mapped to CWE + CodeQL query ID):
 """
 
 import os
-import pickle
+import json
 import base64
+import binascii
 import sqlite3
 import subprocess
 import ipaddress
@@ -102,7 +103,11 @@ def ping():
 @app.route("/load-prefs")
 def load_prefs():
     blob = request.args.get("prefs", "")
-    data = pickle.loads(base64.b64decode(blob))
+    try:
+        decoded = base64.b64decode(blob, validate=True).decode("utf-8")
+        data = json.loads(decoded)
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
+        return "Invalid prefs format", 400
     return f"Loaded prefs: {data}"
 
 
