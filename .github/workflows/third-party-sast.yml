@@ -1,0 +1,85 @@
+# Third-party SAST + SCA scan, manually triggered.
+#
+# Runs two open-source scanners and uploads each result as SARIF to
+# GitHub Code Scanning so findings appear in the "Security" tab
+# alongside CodeQL:
+#
+#   - Semgrep — static code analysis (SAST) using the p/ci ruleset.
+#   - Trivy   — filesystem scan for vulnerable dependencies in
+#               requirements.txt / package manifests (SCA), plus
+#               secret and misconfiguration detection.
+#
+# Each tool uploads under its own SARIF `category` so results don't
+# overwrite one another and don't collide with CodeQL.
+
+name: "Third-party SAST (Semgrep + Trivy)"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep (code SAST)
+    runs-on: ubuntu-latest
+    # Semgrep's own container has the CLI and rules preinstalled.
+    container:
+      image: semgrep/semgrep@sha256:4f79d592f85f91aa37597c0cfbad94ea5fa35c65571425fb061e406e6724d76e
+    permissions:
+      security-events: write   # required to upload SARIF
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Semgrep and produce SARIF
+        # `p/ci` is a curated ruleset covering common SAST findings
+        # across many languages (incl. Python and JavaScript).
+        run: semgrep ci --sarif --output=semgrep.sarif || true
+        env:
+          # No token needed for public rulesets; unset SEMGREP_APP_TOKEN.
+          SEMGREP_RULES: p/ci
+
+      - name: Upload Semgrep SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  trivy:
+    name: Trivy (package vulnerabilities)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 #v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          # vuln    → CVEs in dependency manifests (requirements.txt, etc.)
+          # secret  → hard-coded credentials
+          # misconfig → IaC / Dockerfile misconfigurations
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          # Report every severity so demo alerts show up; tighten as needed.
+          severity: CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN
+          ignore-unfixed: false
+          exit-code: '0'   # never fail the job; we only want the SARIF
+
+      - name: Upload Trivy SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
