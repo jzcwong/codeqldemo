@@ -18,6 +18,7 @@ import pickle
 import base64
 import sqlite3
 import subprocess
+import ipaddress
 from flask import Flask, request, render_template_string, send_file
 
 app = Flask(__name__)
@@ -85,7 +86,11 @@ def download():
 @app.route("/ping")
 def ping():
     host = request.args.get("host", "127.0.0.1")
-    result = subprocess.check_output("ping -c 1 " + host, shell=True)
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return "Invalid host", 400
+    result = subprocess.check_output(["ping", "-c", "1", host], shell=False)
     return f"<pre>{result.decode()}</pre>"
 
 
